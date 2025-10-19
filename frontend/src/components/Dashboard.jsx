@@ -8,9 +8,10 @@ import {
   Calendar,
   Activity,
   CheckCircle,
-  XCircle
+  Download,
+  AlertCircle
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 const Dashboard = () => {
   const [stats, setStats] = useState({
@@ -23,49 +24,170 @@ const Dashboard = () => {
   });
 
   const [userGrowthData, setUserGrowthData] = useState([]);
+  const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [protobufUsers, setProtobufUsers] = useState([]);
+  const [showProtobufModal, setShowProtobufModal] = useState(false);
 
-  // Simulate fetching data from backend
+  const API_BASE_URL = 'http://localhost:5000/api_v1/user';
+
   useEffect(() => {
-    // This would be your actual API call
-    // fetch('http://localhost:3000/api/users/stats')
-    //   .then(res => res.json())
-    //   .then(data => setStats(data));
+    fetchDashboardData();
+  }, []);
 
-    // Mock data for demonstration
-    setTimeout(() => {
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Fetch all users
+      const response = await fetch(`${API_BASE_URL}/getUsers`);
+      if (!response.ok) throw new Error('Failed to fetch users');
+      
+      const data = await response.json();
+      const users = data.users || data || [];
+      
+      // Calculate stats from users
+      const totalUsers = users.length;
+      const activeUsers = users.filter(u => u.status === 'active').length;
+      const inactiveUsers = users.filter(u => u.status === 'inactive').length;
+      const adminUsers = users.filter(u => u.role === 'admin').length;
+      
+      // Calculate users created today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const newUsersToday = users.filter(u => {
+        const createdDate = new Date(u.createdAt);
+        createdDate.setHours(0, 0, 0, 0);
+        return createdDate.getTime() === today.getTime();
+      }).length;
+
+      // Count verified signatures (assuming all users have verified signatures if they exist)
+      const verifiedSignatures = users.filter(u => u.signature).length;
+
       setStats({
-        totalUsers: 156,
-        activeUsers: 142,
-        inactiveUsers: 14,
-        adminUsers: 8,
-        newUsersToday: 12,
-        verifiedSignatures: 156
+        totalUsers,
+        activeUsers,
+        inactiveUsers,
+        adminUsers,
+        newUsersToday,
+        verifiedSignatures
       });
 
-      // Generate last 7 days data
-      const last7Days = [];
-      const today = new Date();
-      
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        
-        const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
-        const fullDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        
-        last7Days.push({
-          day: dayName,
-          fullDate: fullDate,
-          users: Math.floor(Math.random() * 25) + 5, // Random data for demo
-          date: date.toISOString().split('T')[0]
-        });
-      }
-      
-      setUserGrowthData(last7Days);
+      // Generate user growth data for last 7 days
+      const growthData = generateUserGrowthData(users);
+      setUserGrowthData(growthData);
+
+      // Generate recent activity from users
+      const activity = generateRecentActivity(users);
+      setRecentActivity(activity);
+
+    } catch (err) {
+      setError(err.message);
+      console.error('Error fetching dashboard data:', err);
+    } finally {
       setLoading(false);
-    }, 1000);
-  }, []);
+    }
+  };
+
+  const generateUserGrowthData = (users) => {
+    const last7Days = [];
+    const today = new Date();
+    
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(date.getDate() - i);
+      date.setHours(0, 0, 0, 0);
+      
+      const dayName = date.toLocaleDateString('en-US', { weekday: 'short' });
+      const fullDate = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      
+      // Count users created on this day
+      const usersCount = users.filter(u => {
+        const createdDate = new Date(u.createdAt);
+        createdDate.setHours(0, 0, 0, 0);
+        return createdDate.getTime() === date.getTime();
+      }).length;
+      
+      last7Days.push({
+        day: dayName,
+        fullDate: fullDate,
+        users: usersCount,
+        date: date.toISOString().split('T')[0]
+      });
+    }
+    
+    return last7Days;
+  };
+
+  const generateRecentActivity = (users) => {
+    // Sort users by creation date (newest first) and take last 5
+    const sortedUsers = [...users]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 5);
+    
+    return sortedUsers.map((user, index) => {
+      const createdDate = new Date(user.createdAt);
+      const now = new Date();
+      const diffMs = now - createdDate;
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMs / 3600000);
+      const diffDays = Math.floor(diffMs / 86400000);
+      
+      let timeAgo;
+      if (diffMins < 1) timeAgo = 'Just now';
+      else if (diffMins < 60) timeAgo = `${diffMins} min ago`;
+      else if (diffHours < 24) timeAgo = `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+      else timeAgo = `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+      
+      return {
+        id: user.id,
+        action: 'User Created',
+        user: user.email,
+        time: timeAgo,
+        status: user.status === 'active' ? 'success' : 'warning',
+        signature: user.signature ? 'Verified' : 'Pending'
+      };
+    });
+  };
+
+  const fetchProtobufUsers = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/exportUsersProto/export`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/x-protobuf'
+        }
+      });
+
+      if (!response.ok) throw new Error('Failed to fetch protobuf data');
+
+      // Get the protobuf binary data
+      const arrayBuffer = await response.arrayBuffer();
+      
+      // TODO: Decode protobuf data using your generated protobuf.js file
+      // For now, we'll show a message that protobuf export is working
+      console.log('Protobuf data received:', arrayBuffer.byteLength, 'bytes');
+      
+      // You'll need to implement protobuf decoding here
+      // Example: const decoded = UserList.decode(new Uint8Array(arrayBuffer));
+      
+      setProtobufUsers([{
+        note: 'Protobuf export endpoint is working!',
+        bytes: arrayBuffer.byteLength,
+        message: 'Implement protobuf decoding with your .proto schema to see decoded users here'
+      }]);
+      
+      setShowProtobufModal(true);
+    } catch (err) {
+      setError('Protobuf export failed: ' + err.message);
+      console.error('Error fetching protobuf:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const statCards = [
     {
@@ -75,7 +197,7 @@ const Dashboard = () => {
       color: 'from-blue-500 to-blue-600',
       bgColor: 'bg-blue-50',
       textColor: 'text-blue-600',
-      change: '+12%',
+      change: stats.totalUsers > 0 ? '+' + Math.round((stats.newUsersToday / stats.totalUsers) * 100) + '%' : '0%',
       changeType: 'increase'
     },
     {
@@ -85,7 +207,7 @@ const Dashboard = () => {
       color: 'from-green-500 to-green-600',
       bgColor: 'bg-green-50',
       textColor: 'text-green-600',
-      change: '+8%',
+      change: stats.totalUsers > 0 ? Math.round((stats.activeUsers / stats.totalUsers) * 100) + '%' : '0%',
       changeType: 'increase'
     },
     {
@@ -95,8 +217,8 @@ const Dashboard = () => {
       color: 'from-red-500 to-red-600',
       bgColor: 'bg-red-50',
       textColor: 'text-red-600',
-      change: '-3%',
-      changeType: 'decrease'
+      change: stats.totalUsers > 0 ? Math.round((stats.inactiveUsers / stats.totalUsers) * 100) + '%' : '0%',
+      changeType: stats.inactiveUsers > 0 ? 'warning' : 'neutral'
     },
     {
       title: 'Admin Users',
@@ -105,17 +227,9 @@ const Dashboard = () => {
       color: 'from-purple-500 to-purple-600',
       bgColor: 'bg-purple-50',
       textColor: 'text-purple-600',
-      change: '+2',
+      change: '+' + stats.adminUsers,
       changeType: 'neutral'
     }
-  ];
-
-  const recentActivity = [
-    { id: 1, action: 'User Created', user: 'john.doe@email.com', time: '2 min ago', status: 'success' },
-    { id: 2, action: 'Signature Verified', user: 'jane.smith@email.com', time: '15 min ago', status: 'success' },
-    { id: 3, action: 'User Updated', user: 'bob.wilson@email.com', time: '1 hour ago', status: 'success' },
-    { id: 4, action: 'User Deactivated', user: 'alice.brown@email.com', time: '2 hours ago', status: 'warning' },
-    { id: 5, action: 'Protobuf Export', user: 'admin@qtglobal.com', time: '3 hours ago', status: 'info' },
   ];
 
   const CustomTooltip = ({ active, payload }) => {
@@ -130,9 +244,9 @@ const Dashboard = () => {
     return null;
   };
 
-  if (loading) {
+  if (loading && stats.totalUsers === 0) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex items-center justify-center h-screen">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
           <p className="mt-4 text-gray-600">Loading dashboard...</p>
@@ -144,10 +258,27 @@ const Dashboard = () => {
   return (
     <div className="p-6 bg-gray-50 min-h-screen">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Dashboard Overview</h1>
-        <p className="text-gray-600">Welcome to QT Global Software Admin Panel</p>
+      <div className="mb-8 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Dashboard Overview</h1>
+          <p className="text-gray-600">Welcome to QT Global Software Admin Panel</p>
+        </div>
+        <button
+          onClick={fetchProtobufUsers}
+          className="flex items-center space-x-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white px-6 py-3 rounded-lg shadow-lg transition-all duration-200"
+        >
+          <Download className="w-5 h-5" />
+          <span className="font-medium">Export Protobuf</span>
+        </button>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-center space-x-3">
+          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+          <p className="text-red-700">{error}</p>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -164,7 +295,7 @@ const Dashboard = () => {
                 </div>
                 <span className={`text-sm font-semibold ${
                   stat.changeType === 'increase' ? 'text-green-600' : 
-                  stat.changeType === 'decrease' ? 'text-red-600' : 
+                  stat.changeType === 'warning' ? 'text-red-600' : 
                   'text-gray-600'
                 }`}>
                   {stat.change}
@@ -180,7 +311,7 @@ const Dashboard = () => {
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         
-        {/* User Growth Chart - 7 Days (Takes 2 columns) */}
+        {/* User Growth Chart - 7 Days */}
         <div className="lg:col-span-2 bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -204,6 +335,7 @@ const Dashboard = () => {
               <YAxis 
                 stroke="#9ca3af"
                 style={{ fontSize: '12px' }}
+                allowDecimals={false}
               />
               <Tooltip content={<CustomTooltip />} />
               <Bar 
@@ -232,7 +364,9 @@ const Dashboard = () => {
               <div className="flex items-center space-x-2">
                 <span className="text-gray-600">Avg per day:</span>
                 <span className="font-bold text-gray-800">
-                  {Math.round(userGrowthData.reduce((sum, day) => sum + day.users, 0) / 7)} users
+                  {userGrowthData.length > 0 
+                    ? Math.round(userGrowthData.reduce((sum, day) => sum + day.users, 0) / 7) 
+                    : 0} users
                 </span>
               </div>
             </div>
@@ -264,13 +398,19 @@ const Dashboard = () => {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium text-gray-600">Active Rate</span>
                 <span className="text-sm font-bold text-blue-600">
-                  {Math.round((stats.activeUsers / stats.totalUsers) * 100)}%
+                  {stats.totalUsers > 0 
+                    ? Math.round((stats.activeUsers / stats.totalUsers) * 100) 
+                    : 0}%
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div 
                   className="bg-gradient-to-r from-blue-500 to-blue-600 h-2 rounded-full transition-all duration-500"
-                  style={{ width: `${(stats.activeUsers / stats.totalUsers) * 100}%` }}
+                  style={{ 
+                    width: `${stats.totalUsers > 0 
+                      ? (stats.activeUsers / stats.totalUsers) * 100 
+                      : 0}%` 
+                  }}
                 ></div>
               </div>
             </div>
@@ -282,28 +422,67 @@ const Dashboard = () => {
       <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
         <h2 className="text-xl font-bold text-gray-800 mb-6">Recent Activity</h2>
         
-        <div className="space-y-3">
-          {recentActivity.map((activity) => (
-            <div
-              key={activity.id}
-              className="flex items-center justify-between p-4 hover:bg-gray-50 rounded-lg transition-colors border border-gray-100"
-            >
-              <div className="flex items-center space-x-4">
-                <div className={`w-2 h-2 rounded-full ${
-                  activity.status === 'success' ? 'bg-green-500' :
-                  activity.status === 'warning' ? 'bg-yellow-500' :
-                  activity.status === 'info' ? 'bg-blue-500' : 'bg-gray-500'
-                }`}></div>
-                <div>
-                  <p className="font-medium text-gray-800">{activity.action}</p>
-                  <p className="text-sm text-gray-600">{activity.user}</p>
+        {recentActivity.length === 0 ? (
+          <p className="text-center text-gray-500 py-8">No recent activity</p>
+        ) : (
+          <div className="space-y-3">
+            {recentActivity.map((activity) => (
+              <div
+                key={activity.id}
+                className="flex items-center justify-between p-4 hover:bg-gray-50 rounded-lg transition-colors border border-gray-100"
+              >
+                <div className="flex items-center space-x-4">
+                  <div className={`w-2 h-2 rounded-full ${
+                    activity.status === 'success' ? 'bg-green-500' :
+                    activity.status === 'warning' ? 'bg-yellow-500' :
+                    'bg-blue-500'
+                  }`}></div>
+                  <div>
+                    <p className="font-medium text-gray-800">{activity.action}</p>
+                    <p className="text-sm text-gray-600">{activity.user}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-sm text-gray-500 block">{activity.time}</span>
+                  <span className="text-xs text-green-600">{activity.signature}</span>
                 </div>
               </div>
-              <span className="text-sm text-gray-500">{activity.time}</span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Protobuf Modal */}
+      {showProtobufModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-800">Protobuf Export</h2>
+              <button
+                onClick={() => setShowProtobufModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="text-green-800 font-medium">✓ Protobuf data received successfully!</p>
+                <p className="text-sm text-green-700 mt-1">
+                  {protobufUsers[0]?.bytes} bytes of protobuf data received
+                </p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-800">
+                  <strong>Next Step:</strong> Implement protobuf decoding using your .proto schema to display the actual user data here.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

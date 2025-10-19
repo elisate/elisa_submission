@@ -150,12 +150,12 @@ const Navbar = () => {
                       <span>Settings</span>
                     </button>
                   </div>
-                  <div className="border-t border-gray-200">
+                  {/* <div className="border-t border-gray-200">
                     <button className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center space-x-3 transition-colors">
                       <LogOut className="w-4 h-4" />
                       <span>Logout</span>
                     </button>
-                  </div>
+                  </div> */}
                 </div>
               )}
             </div>

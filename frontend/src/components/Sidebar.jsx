@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Users, 
   Shield, 
   FileCode, 
   Settings, 
+  LogOut,
   ChevronLeft,
   ChevronRight,
   Activity,
@@ -42,31 +44,16 @@ const Sidebar = () => {
       label: 'User Management',
       icon: Users,
       path: '/users',
+ 
     },
-    {
-      id: 'analytics',
-      label: 'User Analytics',
-      icon: Activity,
-      path: '/analytics'
-    },
+ 
     {
       id: 'protobuf',
       label: 'Protobuf Export',
       icon: FileCode,
       path: '/protobuf'
     },
-    {
-      id: 'crypto',
-      label: 'Crypto Verification',
-      icon: Shield,
-      path: '/crypto'
-    },
-    {
-      id: 'database',
-      label: 'Database',
-      icon: Database,
-      path: '/database'
-    },
+    
     {
       id: 'settings',
       label: 'Settings',
@@ -141,8 +128,9 @@ const Sidebar = () => {
             const isActive = activeItem === item.id;
             
             return (
-              <button
+              <Link
                 key={item.id}
+                to={item.path}
                 onClick={() => {
                   setActiveItem(item.id);
                   setIsMobileOpen(false); // Close mobile menu on item click
@@ -169,16 +157,41 @@ const Sidebar = () => {
                     )}
                   </>
                 )}
-              </button>
+              </Link>
             );
           })}
         </nav>
-          <div className="p-4 text-center border-t border-slate-700">
+
+        {/* User Info Section */}
+        <div className="p-4 border-t border-slate-700">
+          <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'space-x-3'} mb-3`}>
+            {!isCollapsed ? (
+              <>
+              
+             
+              </>
+            ) : (
+              <div className="w-10 h-10 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center">
+                <span className="text-white font-bold text-sm">AD</span>
+              </div>
+            )}
           </div>
-   
+          
+          <button
+            className={`w-full flex items-center ${
+              isCollapsed ? 'justify-center' : 'space-x-3'
+            } px-4 py-2.5 rounded-lg text-slate-300 hover:bg-red-500/10 hover:text-red-400 transition-all duration-200`}
+          >
+            <LogOut className="w-5 h-5" />
+            {!isCollapsed && <span className="font-medium">Logout</span>}
+          </button>
+        </div>
+
+        {/* Version Info */}
+      
       </div>
     </>
   );
 };
 
-export default Sidebar
+export default Sidebar;
